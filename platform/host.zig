@@ -223,8 +223,16 @@ fn roc_panic_print(comptime fmt: []const u8, args: anytype) noreturn {
     std.process.exit(0);
 }
 
+const E = extern struct {
+    code: i32,
+    message: RocStr,
+    tag: u8,
+};
+
 fn RocResult(comptime T: type) type {
+    // the size of this structure must be kept in sync with the structures produced by roc like InternalFile.ReadError
     return extern struct {
+        // TODO payload should be a union T, E when we put back InternalFile.ReadError#(Unrecognized I32 Str)
         payload: T,
         tag: u8,
         pub const len = @sizeOf(@This());
@@ -233,46 +241,34 @@ fn RocResult(comptime T: type) type {
 const ResultRocStr = RocResult(RocStr);
 const ResultRocList = RocResult(RocList);
 
-pub export fn roc_fx_fileReadBytes2(result: *ResultRocList, path: *RocStr) callconv(.C) void {
-    // var realpathbuf: [256]u8 = undefined;
-    // const realpath = std.fs.cwd().realpath(".", &realpathbuf);
-    // std.debug.print("path '{s}' realpath {s}\n", .{ path.asSlice(), realpath });
-    const file = std.fs.cwd().openFile(path.asSlice(), .{}) catch |e|
-        roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path.asSlice() });
-    defer file.close();
-    const stat = file.stat() catch |e|
-        roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path.asSlice() });
+// credit and thanks to https://github.com/bhansconnect for getting this working
+pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) ResultRocList {
+    // std.debug.print("Called fileReadBytes\n", .{});
+    if (path.bytes) |path_ptr| {
+        const path_slice = path_ptr[0..path.len()];
+        // var realpathbuf: [256]u8 = undefined;
+        // const realpath = std.fs.cwd().realpath(".", &realpathbuf);
+        // std.debug.print("path '{s}' realpath {s}\n", .{ path_slice, realpath });
+        const file = std.fs.cwd().openFile(path_slice, .{}) catch |e|
+            roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path_slice });
+        defer file.close();
+        const stat = file.stat() catch |e|
+            roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path_slice });
+        // std.debug.print("stat.size {}\n", .{stat.size});
+        var roclist = RocList.allocate(@alignOf(usize), stat.size, 1);
+        if (roclist.bytes) |bytes| {
+            const slice = bytes[0..stat.size];
+            const amt = file.readAll(slice) catch unreachable;
+            std.debug.assert(amt == stat.size);
 
-    // std.debug.print("stat.size {}\n", .{stat.size});
-    var rocstr = RocStr.allocate(stat.size, stat.size + 1);
-    var bytes = rocstr.str_bytes orelse unreachable;
-    const slice = bytes[0..stat.size];
-    const amt = file.readAll(slice) catch unreachable;
-    // std.debug.print("slice {s}\n", .{slice[0..10]});
-    std.debug.assert(amt == stat.size);
-
-    result.payload = RocList.fromSlice(u8, slice);
-    result.tag = 1;
-}
-
-pub export fn roc_fx_fileReadBytes(result: *ResultRocStr, path: *RocStr) callconv(.C) void {
-    // var realpathbuf: [256]u8 = undefined;
-    // const realpath = std.fs.cwd().realpath(".", &realpathbuf);
-    // std.debug.print("path '{s}' realpath {s}\n", .{ path.asSlice(), realpath });
-    const file = std.fs.cwd().openFile(path.asSlice(), .{}) catch |e|
-        roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path.asSlice() });
-    defer file.close();
-    const stat = file.stat() catch |e|
-        roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path.asSlice() });
-
-    // std.debug.print("stat.size {}\n", .{stat.size});
-    var rocstr = RocStr.allocate(stat.size, stat.size + 1);
-    var bytes = rocstr.str_bytes orelse unreachable;
-    const slice = bytes[0..stat.size];
-    const amt = file.readAll(slice) catch unreachable;
-    // std.debug.print("slice {s}\n", .{slice[0..10]});
-    std.debug.assert(amt == stat.size);
-
-    result.payload = RocStr.fromSlice(slice);
-    result.tag = 1;
+            return ResultRocList{
+                .payload = roclist,
+                .tag = 1,
+            };
+        }
+    }
+    return ResultRocList{
+        .payload = RocList.empty(),
+        .tag = 0,
+    };
 }
