@@ -4,8 +4,7 @@ app "platform-main"
         pf.Stdout, pf.Program.{ Program },
         pf.Task, 
         pf.Path, 
-        # pf.File.{ readUtf8 }, 
-        
+        pf.File,
     ]
     provides [main] to pf
 
@@ -15,9 +14,10 @@ main =
     path = Path.fromStr pathstr
     task = 
         _ <- Task.await (Stdout.line (Path.display path))
-        _ <- Task.await (Stdout.line "this gets printed")
-        # contents <- Task.await (File.readBytes path)
-        # _ <- Task.await (Stdout.line ((Str.fromUtf8 contents) # silently fails, breaks subsequent prints
-        #    |> (Result.withDefault "oops")))
-        Stdout.line "this doesn't get printed"
+        contents <- Task.await (File.readUtf8 path)
+        raw = Str.toUtf8 contents
+        head = List.takeFirst raw 50
+        shead = Result.withDefault (Str.fromUtf8 head) ""
+        _ <- Task.await (Stdout.line shead)
+        Stdout.line "...truncated"
     Program.quick task

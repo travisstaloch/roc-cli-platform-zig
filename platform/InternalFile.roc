@@ -13,7 +13,8 @@ ReadErr : [
     StaleNetworkFileHandle,
     OutOfMemory,
     Unsupported,
-    Unrecognized I32 Str,
+    # FIXME uncomment this after host.zig/RocResult#payload becomes a union T,E
+    # Unrecognized I32 Str,
 ]
 
 WriteErr : [

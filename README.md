@@ -19,13 +19,10 @@ An experimental [roc lang](https://github.com/roc-lang) [zig](https://ziglang.or
 
 # status
 see [platform-test/main.roc](platform-test/main.roc)
-- [x] Stdout.line working
-- [ ] File.readBytes silently fails and breaks subsequent Stdout.line prints
+  - [x] Stdout.line working
+  - [ ] wip - File.readBytes functional but not complete
 
 # todo
-  - [ ] `platform/File#readBytes` / `platform/host.zig#roc_fx_fileReadBytes()`
-    - [x] handle incoming file path correctly. able to debug.print
-    - [ ] assign outgoing `*RocResult(T)` param correctly. 
-      - discussion: 
-        - https://roc.zulipchat.com/#narrow/stream/347488-roctoberfest/topic/Alternative.20platform.20languages/near/303105460
+  - [ ] make `platform/host.zig/RocResult#payload` a union T,E to sync with `platform/InternalFile.ReadError`
+      - discussion:  https://roc.zulipchat.com/#narrow/stream/347488-roctoberfest/topic/Alternative.20platform.20languages/near/303105460
 
