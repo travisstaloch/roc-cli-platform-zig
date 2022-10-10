@@ -1,0 +1,10 @@
+*zig-cache/
+*zig-out/
+*.o
+*.so
+*dynhost
+*metadata
+*preprocessedhost
+platform/cli-platform-rust
+platform-test/platform-main
+*.old
