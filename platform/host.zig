@@ -101,11 +101,27 @@ pub export fn main() callconv(.C) u8 {
 
     var timer = std.time.Timer.start() catch unreachable;
 
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const allocator = arena.allocator();
+    var args = std.process.argsAlloc(allocator) catch unreachable;
+    std.debug.print("main() args.len {}\n", .{args.len});
+    // const alignment = @alignOf(RocStr);
+    // const rocstrsize = @sizeOf(RocStr);
+    // var argslist = RocList.allocate(alignment, 1, rocstrsize);
+    // // for (args) |arg| {
+    // while (args.next(allocator)) |argu| {
+    //     const arg = argu catch unreachable;
+    //     std.debug.print("arg {*}\n", .{arg});
+    //     var rocstr = RocStr.fromSlice(arg);
+    //     const with_capacity = list.listReserve(argslist, alignment, 1, rocstrsize, .InPlace);
+    //     argslist = list.listAppendUnsafe(with_capacity, rocstr.str_bytes orelse unreachable, size);
+    // }
+
     roc__mainForHost_1_exposed_generic(output);
 
     const closure_data_pointer = @ptrCast([*]u8, output);
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    call_the_closure(arena.allocator(), closure_data_pointer);
+
+    call_the_closure(allocator, closure_data_pointer);
 
     const nanos = timer.read();
     const seconds = (@intToFloat(f64, nanos) / 1_000_000_000.0);
@@ -141,22 +157,20 @@ fn call_the_closure(allocator: Allocator, closure_data_pointer: [*]u8) void {
 
 pub export fn roc_fx_putInt(int: i64) i64 {
     const stdout = std.io.getStdOut().writer();
-
-    stdout.print("{d}", .{int}) catch unreachable;
-
-    stdout.print("\n", .{}) catch unreachable;
-
+    stdout.print("{d}\n", .{int}) catch unreachable;
     return 0;
 }
 
 export fn roc_fx_putLine(rocPath: *str.RocStr) callconv(.C) void {
     const stdout = std.io.getStdOut().writer();
+    _ = stdout.write(rocPath.asSlice()) catch unreachable;
+    _ = stdout.write("\n") catch unreachable;
+}
 
-    for (rocPath.asSlice()) |char| {
-        stdout.print("{c}", .{char}) catch unreachable;
-    }
-
-    stdout.print("\n", .{}) catch unreachable;
+export fn roc_fx_putLineStderr(rocPath: *str.RocStr) callconv(.C) void {
+    const stderr = std.io.getStdErr().writer();
+    _ = stderr.write(rocPath.asSlice()) catch unreachable;
+    _ = stderr.write("\n") catch unreachable;
 }
 
 const GetInt = extern struct {
@@ -171,6 +185,7 @@ comptime {
         @export(roc_fx_getInt_32bit, .{ .name = "roc_fx_getInt" });
     }
     @export(roc_fx_putLine, .{ .name = "roc_fx_stdoutLine" });
+    @export(roc_fx_putLineStderr, .{ .name = "roc_fx_stderrLine" });
 }
 
 fn roc_fx_getInt_64bit() callconv(.C) GetInt {
@@ -271,4 +286,31 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) ResultRocList {
         .payload = RocList.empty(),
         .tag = 0,
     };
+}
+
+export fn roc_fx_args() callconv(.C) RocList {
+    // TODO: can we be more efficient about reusing the String's memory for RocStr?
+    // std::env::args_os()
+    //     .map(|os_str| RocStr::from(os_str.to_string_lossy().borrow()))
+    //     .collect()
+    const alignment = @alignOf(RocStr);
+    const size = @sizeOf(RocStr);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const allocator = arena.allocator();
+
+    const args = std.process.argsAlloc(allocator) catch unreachable;
+    var osargs = std.os.argv;
+
+    std.debug.print("roc_fx_args() args.len {} osargs.len {}\n", .{ args.len, osargs.len });
+    var roclist = RocList.allocate(alignment, 0, size);
+
+    // while (args.next(allocator)) |argu| {
+    //     const arg = argu catch unreachable;
+    for (args) |arg| {
+        std.debug.print("arg {s}\n", .{arg});
+        var rocstr = RocStr.fromSlice(std.mem.span(arg));
+        const with_capacity = list.listReserve(roclist, alignment, 1, size, .InPlace);
+        roclist = list.listAppendUnsafe(with_capacity, rocstr.str_bytes orelse unreachable, size);
+    }
+    return roclist;
 }
