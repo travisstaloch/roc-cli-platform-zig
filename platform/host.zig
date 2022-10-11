@@ -104,7 +104,7 @@ pub export fn main() callconv(.C) u8 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
     var args = std.process.argsAlloc(allocator) catch unreachable;
-    std.debug.print("main() args.len {}\n", .{args.len});
+    std.debug.print("main() args.len {} osargs.len {}\n", .{ args.len, std.os.argv.len });
     // const alignment = @alignOf(RocStr);
     // const rocstrsize = @sizeOf(RocStr);
     // var argslist = RocList.allocate(alignment, 1, rocstrsize);
@@ -313,4 +313,18 @@ export fn roc_fx_args() callconv(.C) RocList {
         roclist = list.listAppendUnsafe(with_capacity, rocstr.str_bytes orelse unreachable, size);
     }
     return roclist;
+}
+
+export fn roc_fx_envVar(var_name: *RocStr) callconv(.C) ResultRocStr {
+    const slice = var_name.asSlice();
+    // std.debug.print("roc_fx_envVar({s})\n", .{slice});
+    const contents = std.process.getEnvVarOwned(std.heap.c_allocator, slice) catch return .{
+        .payload = RocStr.empty(),
+        .tag = 0,
+    };
+
+    return .{
+        .payload = RocStr.fromSlice(contents),
+        .tag = 1,
+    };
 }
