@@ -20,7 +20,15 @@ main = Program.withArgs \args ->
         contents <- path |> Path.fromStr |> File.readUtf8 |> Task.await
         raw = Str.toUtf8 contents
         head = List.takeFirst raw 35 |> Str.fromUtf8 |> Result.withDefault ""
-        _ <- Stdout.line "----\nFile.readUtf8 \(path):\n----\n\(head)...(truncated)\n---- " |> Task.await
+        _ <- Stdout.line "----\nFile.readUtf8 \(path):\n----\n\(head)...(truncated)\n----" |> Task.await
+
+        nonpath = "not-a-file"
+        contents2 <- nonpath
+            |> Path.fromStr
+            |> File.readUtf8
+            |> Task.onFail (\_ -> Task.succeed "Not Found") #TODO print error tag somehow
+            |> Task.await
+        _ <- Stdout.line "\(nonpath):               \(contents2)" |> Task.await
 
         # Program.withArgs
         arg0 = List.get args 0 |> Result.withDefault "empty"
@@ -46,7 +54,7 @@ main = Program.withArgs \args ->
         envkey = "foo"
         Env.var envkey |> Task.attempt \r ->
             when r is
-                Err _ ->     Stderr.line "Env.var:\(envkey)         not found - this line goes to stderr"
+                Err _ ->     Stderr.line "Env.var:                  \(envkey)=not found - this line goes to stderr"
                 Ok envval -> Stdout.line "Env.var:                  \(envkey)=\(envval)"
 
     Task.attempt task \result ->
