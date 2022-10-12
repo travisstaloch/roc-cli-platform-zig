@@ -89,7 +89,7 @@ export fn roc_memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void {
 
 const Unit = extern struct {};
 
-pub export fn main() callconv(.C) u8 {
+pub fn main() u8 {
     // The size might be zero; if so, make it at least 8 so that we don't have a nullptr
     const size = std.math.max(@intCast(usize, roc__mainForHost_size()), 8);
     const raw_output = roc_alloc(@intCast(usize, size), @alignOf(u64)).?;
@@ -103,8 +103,9 @@ pub export fn main() callconv(.C) u8 {
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
-    var args = std.process.argsAlloc(allocator) catch unreachable;
-    std.debug.print("main() args.len {} osargs.len {}\n", .{ args.len, std.os.argv.len });
+    // const allocator = std.heap.page_allocator;
+    // var args = std.process.argsAlloc(allocator) catch unreachable;
+    // std.debug.print("main() args.len {} osargs.len {}\n", .{ args.len, std.os.argv.len });
     // const alignment = @alignOf(RocStr);
     // const rocstrsize = @sizeOf(RocStr);
     // var argslist = RocList.allocate(alignment, 1, rocstrsize);
@@ -161,12 +162,14 @@ pub export fn roc_fx_putInt(int: i64) i64 {
     return 0;
 }
 
+// TODO buffered writer
 export fn roc_fx_putLine(rocPath: *str.RocStr) callconv(.C) void {
     const stdout = std.io.getStdOut().writer();
     _ = stdout.write(rocPath.asSlice()) catch unreachable;
     _ = stdout.write("\n") catch unreachable;
 }
 
+// TODO buffered writer
 export fn roc_fx_putLineStderr(rocPath: *str.RocStr) callconv(.C) void {
     const stderr = std.io.getStdErr().writer();
     _ = stderr.write(rocPath.asSlice()) catch unreachable;
@@ -245,16 +248,23 @@ const E = extern struct {
 };
 
 fn RocResult(comptime T: type) type {
-    // the size of this structure must be kept in sync with the structures produced by roc like InternalFile.ReadError
+    // the size of this structure must be kept in sync with the structures
+    // produced by roc like InternalFile.ReadError
     return extern struct {
-        // TODO payload should be a union T, E when we put back InternalFile.ReadError#(Unrecognized I32 Str)
+        // TODO payload should be a union T, E when we put back
+        // InternalFile.ReadError#(Unrecognized I32 Str)
         payload: T,
         tag: u8,
         pub const len = @sizeOf(@This());
     };
 }
+
 const ResultRocStr = RocResult(RocStr);
 const ResultRocList = RocResult(RocList);
+const ResultVoid = extern struct {
+    tag: u8,
+    pub const len = 1;
+};
 
 // credit and thanks to https://github.com/bhansconnect for getting this working
 pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) ResultRocList {
@@ -288,36 +298,33 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) ResultRocList {
     };
 }
 
+// NOTE: when run with `roc file.roc` arg 0 will be '/proc/self/fd/3' on linux
+// because the exe is compiled in memory and then launchd from the roc run executable.
+// When run with `roc build file.roc && ./file` arg 0 will be normal.
 export fn roc_fx_args() callconv(.C) RocList {
-    // TODO: can we be more efficient about reusing the String's memory for RocStr?
-    // std::env::args_os()
-    //     .map(|os_str| RocStr::from(os_str.to_string_lossy().borrow()))
-    //     .collect()
-    const alignment = @alignOf(RocStr);
-    const size = @sizeOf(RocStr);
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const allocator = arena.allocator();
-
+    const rocstr_alignment = @alignOf(RocStr);
+    const rocstr_size = @sizeOf(RocStr);
+    const allocator = std.heap.c_allocator;
+    // FIXME memory leak
     const args = std.process.argsAlloc(allocator) catch unreachable;
-    var osargs = std.os.argv;
-
-    std.debug.print("roc_fx_args() args.len {} osargs.len {}\n", .{ args.len, osargs.len });
-    var roclist = RocList.allocate(alignment, 0, size);
-
-    // while (args.next(allocator)) |argu| {
-    //     const arg = argu catch unreachable;
+    var roclist = RocList.empty();
     for (args) |arg| {
-        std.debug.print("arg {s}\n", .{arg});
+        // std.debug.print("arg {s} argv[i] {s}\n", .{ arg, std.os.argv[i] });
         var rocstr = RocStr.fromSlice(std.mem.span(arg));
-        const with_capacity = list.listReserve(roclist, alignment, 1, size, .InPlace);
-        roclist = list.listAppendUnsafe(with_capacity, rocstr.str_bytes orelse unreachable, size);
+        roclist = list.listAppend(
+            roclist,
+            rocstr_alignment,
+            @ptrCast([*]u8, &rocstr),
+            rocstr_size,
+            .InPlace,
+        );
     }
     return roclist;
 }
 
 export fn roc_fx_envVar(var_name: *RocStr) callconv(.C) ResultRocStr {
     const slice = var_name.asSlice();
-    // std.debug.print("roc_fx_envVar({s})\n", .{slice});
+    // FIXME memory leak
     const contents = std.process.getEnvVarOwned(std.heap.c_allocator, slice) catch return .{
         .payload = RocStr.empty(),
         .tag = 0,
@@ -325,6 +332,43 @@ export fn roc_fx_envVar(var_name: *RocStr) callconv(.C) ResultRocStr {
 
     return .{
         .payload = RocStr.fromSlice(contents),
+        .tag = 1,
+    };
+}
+
+export fn roc_fx_cwd() callconv(.C) RocList {
+    var buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    // FIXME handle error.NameTooLong - use std.process.getCwdAlloc
+    const cwd = std.process.getCwd(&buf) catch return RocList.empty();
+    return RocList.fromSlice(u8, cwd);
+}
+
+export fn roc_fx_setCwd(path: *RocList) callconv(.C) ResultVoid {
+    var tag: u8 = 1;
+    if (path.bytes) |bytes| {
+        // std.debug.print("roc_fx_setCwd {s}\n", .{bytes[0..path.length]});
+        std.process.changeCurDir(bytes[0..path.length]) catch {
+            tag = 0;
+        };
+    } else tag = 0;
+
+    return .{
+        .tag = tag,
+    };
+}
+
+// NOTE: when run with `roc file.roc` arg 0 will be '/proc/self/fd/3' on linux
+// because the exe is compiled in memory and then launchd from the roc run executable.
+// When run with `roc build file.roc && ./file` arg 0 will be normal.
+export fn roc_fx_exePath() callconv(.C) ResultRocList {
+    // std.debug.print("roc_fx_exePath()\n", .{});
+    const args = std.process.argsAlloc(std.heap.c_allocator) catch return .{
+        .payload = RocList.empty(),
+        .tag = 0,
+    };
+    const arg0 = std.mem.span(args[0]);
+    return .{
+        .payload = RocList.fromSlice(u8, arg0),
         .tag = 1,
     };
 }

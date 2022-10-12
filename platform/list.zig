@@ -452,7 +452,7 @@ pub fn listAppendUnsafe(
     return output;
 }
 
-fn listAppend(list: RocList, alignment: u32, element: Opaque, element_width: usize, update_mode: UpdateMode) callconv(.C) RocList {
+pub fn listAppend(list: RocList, alignment: u32, element: Opaque, element_width: usize, update_mode: UpdateMode) callconv(.C) RocList {
     const with_capacity = listReserve(list, alignment, 1, element_width, update_mode);
     return listAppendUnsafe(with_capacity, element, element_width);
 }
