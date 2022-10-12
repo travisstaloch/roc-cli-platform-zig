@@ -89,6 +89,8 @@ export fn roc_memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void {
 
 const Unit = extern struct {};
 
+// WARNING: don't change this back to `pub extern fn main() callconv(.C) u8` as
+// that breaks zig's cli argument handling, maing std.process.args() yield in 0 args.
 pub fn main() u8 {
     // The size might be zero; if so, make it at least 8 so that we don't have a nullptr
     const size = std.math.max(@intCast(usize, roc__mainForHost_size()), 8);
@@ -103,20 +105,6 @@ pub fn main() u8 {
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
-    // const allocator = std.heap.page_allocator;
-    // var args = std.process.argsAlloc(allocator) catch unreachable;
-    // std.debug.print("main() args.len {} osargs.len {}\n", .{ args.len, std.os.argv.len });
-    // const alignment = @alignOf(RocStr);
-    // const rocstrsize = @sizeOf(RocStr);
-    // var argslist = RocList.allocate(alignment, 1, rocstrsize);
-    // // for (args) |arg| {
-    // while (args.next(allocator)) |argu| {
-    //     const arg = argu catch unreachable;
-    //     std.debug.print("arg {*}\n", .{arg});
-    //     var rocstr = RocStr.fromSlice(arg);
-    //     const with_capacity = list.listReserve(argslist, alignment, 1, rocstrsize, .InPlace);
-    //     argslist = list.listAppendUnsafe(with_capacity, rocstr.str_bytes orelse unreachable, size);
-    // }
 
     roc__mainForHost_1_exposed_generic(output);
 
@@ -235,25 +223,14 @@ fn roc_fx_getInt_help() !i64 {
     return std.fmt.parseInt(i64, line, 10);
 }
 
-fn roc_panic_print(comptime fmt: []const u8, args: anytype) noreturn {
-    const stderr = std.io.getStdErr().writer();
-    stderr.print("Application crashed with message\n\n    " ++ fmt ++ "\n\nShutting down\n", args) catch unreachable;
-    std.process.exit(0);
+// a result with and empty (void) error type
+fn RocResult(comptime T: type) type {
+    return RocResultUnion(T, void);
 }
 
-const E = extern struct {
-    code: i32,
-    message: RocStr,
-    tag: u8,
-};
-
-fn RocResult(comptime T: type) type {
-    // the size of this structure must be kept in sync with the structures
-    // produced by roc like InternalFile.ReadError
+fn RocResultUnion(comptime T: type, comptime E: type) type {
     return extern struct {
-        // TODO payload should be a union T, E when we put back
-        // InternalFile.ReadError#(Unrecognized I32 Str)
-        payload: T,
+        payload: extern union { ok: T, err: E },
         tag: u8,
         pub const len = @sizeOf(@This());
     };
@@ -261,39 +238,88 @@ fn RocResult(comptime T: type) type {
 
 const ResultRocStr = RocResult(RocStr);
 const ResultRocList = RocResult(RocList);
+
 const ResultVoid = extern struct {
     tag: u8,
     pub const len = 1;
 };
 
+// the size of this structure must be kept in sync with the structures
+// produced by roc like InternalFile.ReadError
+const RocFileReadResult = RocResultUnion(RocList, ReadErr);
+
+pub const ReadErr = extern struct {
+    payload: Payload,
+    tag: u8,
+
+    pub fn init(comptime tag: anytype, payload_value: anytype) ReadErr {
+        const tagname = @tagName(tag);
+        const tagval = comptime for (std.meta.fields(Payload)) |f, i| {
+            if (std.mem.eql(u8, tagname, f.name)) break i;
+        } else @compileError(std.fmt.comptimePrint("invalid tag .{s}\n", .{tagname}));
+
+        return .{ .tag = tagval, .payload = @unionInit(Payload, tagname, payload_value) };
+    }
+    pub const Payload = extern union {
+        NotFound: void,
+        Interrupted: void,
+        InvalidFilename: void,
+        PermissionDenied: void,
+        TooManySymlinks: void, //aka FilesystemLoop
+        TooManyHardlinks: void,
+        TimedOut: void,
+        StaleNetworkFileHandle: void,
+        OutOfMemory: void,
+        Unsupported: void,
+        Unrecognized: extern struct {
+            code: i32,
+            message: RocStr,
+        },
+    };
+};
+
 // credit and thanks to https://github.com/bhansconnect for getting this working
-pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) ResultRocList {
+pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResult {
     // std.debug.print("Called fileReadBytes\n", .{});
     if (path.bytes) |path_ptr| {
         const path_slice = path_ptr[0..path.len()];
         // var realpathbuf: [256]u8 = undefined;
         // const realpath = std.fs.cwd().realpath(".", &realpathbuf);
         // std.debug.print("path '{s}' realpath {s}\n", .{ path_slice, realpath });
-        const file = std.fs.cwd().openFile(path_slice, .{}) catch |e|
-            roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path_slice });
+        // TODO better error handling. this doesn't check the error, assuming FileNotFound
+        const file = std.fs.cwd().openFile(path_slice, .{}) catch return .{
+            .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+            .tag = 0,
+        };
+        if (file.handle == -1) return .{
+            .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+            .tag = 0,
+        };
+        // NOTE this defer must come after early return if fd == -1. otherwise boom
         defer file.close();
-        const stat = file.stat() catch |e|
-            roc_panic_print("{s} file path '{s}'\n", .{ @errorName(e), path_slice });
+        const stat = file.stat() catch return .{
+            .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+            .tag = 0,
+        };
         // std.debug.print("stat.size {}\n", .{stat.size});
         var roclist = RocList.allocate(@alignOf(usize), stat.size, 1);
         if (roclist.bytes) |bytes| {
             const slice = bytes[0..stat.size];
-            const amt = file.readAll(slice) catch unreachable;
+            const amt = file.readAll(slice) catch return .{
+                .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+                .tag = 0,
+            };
+            // TODO: handle error here
             std.debug.assert(amt == stat.size);
 
-            return ResultRocList{
-                .payload = roclist,
+            return .{
+                .payload = .{ .ok = roclist },
                 .tag = 1,
             };
         }
     }
-    return ResultRocList{
-        .payload = RocList.empty(),
+    return .{
+        .payload = .{ .err = ReadErr.init(.InvalidFilename, {}) },
         .tag = 0,
     };
 }
@@ -309,7 +335,7 @@ export fn roc_fx_args() callconv(.C) RocList {
     const args = std.process.argsAlloc(allocator) catch unreachable;
     var roclist = RocList.empty();
     for (args) |arg| {
-        // std.debug.print("arg {s} argv[i] {s}\n", .{ arg, std.os.argv[i] });
+        // std.debug.print("roc_fx_args() arg {s}\n", .{ arg });
         var rocstr = RocStr.fromSlice(std.mem.span(arg));
         roclist = list.listAppend(
             roclist,
@@ -326,12 +352,12 @@ export fn roc_fx_envVar(var_name: *RocStr) callconv(.C) ResultRocStr {
     const slice = var_name.asSlice();
     // FIXME memory leak
     const contents = std.process.getEnvVarOwned(std.heap.c_allocator, slice) catch return .{
-        .payload = RocStr.empty(),
+        .payload = .{ .err = {} },
         .tag = 0,
     };
 
     return .{
-        .payload = RocStr.fromSlice(contents),
+        .payload = .{ .ok = RocStr.fromSlice(contents) },
         .tag = 1,
     };
 }
@@ -346,7 +372,7 @@ export fn roc_fx_cwd() callconv(.C) RocList {
 export fn roc_fx_setCwd(path: *RocList) callconv(.C) ResultVoid {
     var tag: u8 = 1;
     if (path.bytes) |bytes| {
-        // std.debug.print("roc_fx_setCwd {s}\n", .{bytes[0..path.length]});
+        // std.debug.print("called roc_fx_setCwd({s})\n", .{bytes[0..path.length]});
         std.process.changeCurDir(bytes[0..path.length]) catch {
             tag = 0;
         };
@@ -361,14 +387,14 @@ export fn roc_fx_setCwd(path: *RocList) callconv(.C) ResultVoid {
 // because the exe is compiled in memory and then launchd from the roc run executable.
 // When run with `roc build file.roc && ./file` arg 0 will be normal.
 export fn roc_fx_exePath() callconv(.C) ResultRocList {
-    // std.debug.print("roc_fx_exePath()\n", .{});
+    // std.debug.print("called roc_fx_exePath()\n", .{});
     const args = std.process.argsAlloc(std.heap.c_allocator) catch return .{
-        .payload = RocList.empty(),
+        .payload = .{ .err = {} },
         .tag = 0,
     };
     const arg0 = std.mem.span(args[0]);
     return .{
-        .payload = RocList.fromSlice(u8, arg0),
+        .payload = .{ .ok = RocList.fromSlice(u8, arg0) },
         .tag = 1,
     };
 }

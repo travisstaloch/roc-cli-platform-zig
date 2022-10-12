@@ -4,7 +4,6 @@ interface File
         # WriteErr, write, writeUtf8, writeBytes, 
         readUtf8, 
         readBytes, 
-        # readBytes2,
         # delete
     ]
     imports [Task.{ Task }, InternalTask, InternalFile, Path.{ Path }, InternalPath, Effect.{ Effect }]
@@ -95,10 +94,6 @@ ReadErr : InternalFile.ReadErr
 readBytes : Path -> Task (List U8) [FileReadErr Path ReadErr]* [Read [File]*]*
 readBytes = \path ->
     toReadTask path \bytes -> Effect.fileReadBytes bytes
-
-# readBytes2 : Path -> Task (List U8) [FileReadErr Path ReadErr]* [Read [File]*]*
-# readBytes2 = \path ->
-#     toReadTask2 path \bytes -> Effect.fileReadBytes2 bytes
 
 ## Reads a [Str] from a file containing [UTF-8](https://en.wikipedia.org/wiki/UTF-8)-encoded text.
 ##

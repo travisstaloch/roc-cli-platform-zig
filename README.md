@@ -16,7 +16,7 @@ An experimental [roc lang](https://github.com/roc-lang) cli platform in [zig](ht
 ```
 # status
   - [x] Stdout.line, Stderr.line
-  - [ ] File.readBytes functional but missing some error handling
+  - [x] File.readBytes - with initial error handling *wip
   - [x] Process.withArgs
   - [x] Env.{var,cwd,setCwd,exePath}
 
@@ -30,8 +30,7 @@ see [platform-test/main.roc](platform-test/main.roc) to see what works.
   - crates/compiler/builtins/bitcode/src/{utils,list}.zig
 
 # todo
-  - [ ] make `platform/host.zig/RocResult#payload` a union T,E to sync with `platform/InternalFile.ReadError`
-      - discussion:  https://roc.zulipchat.com/#narrow/stream/347488-roctoberfest/topic/Alternative.20platform.20languages/near/303105460
+- File.write, delete, ...
 
 # contributors
  - bhansconnect@github
