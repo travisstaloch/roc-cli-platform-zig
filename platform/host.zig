@@ -248,33 +248,38 @@ const ResultVoid = extern struct {
 // produced by roc like InternalFile.ReadError
 const RocFileReadResult = RocResultUnion(RocList, ReadErr);
 
+// FIXME: file-read-errors.roc always prints 'other unhandled error' for all errors
+// not sure what is causing this. perhaps the ReadErr layout still isn't
+// correct?
 pub const ReadErr = extern struct {
-    payload: Payload,
+    code: i32,
+    message: RocStr,
     tag: u8,
 
-    pub fn init(comptime tag: anytype, payload_value: anytype) ReadErr {
-        const tagname = @tagName(tag);
-        const tagval = comptime for (std.meta.fields(Payload)) |f, i| {
-            if (std.mem.eql(u8, tagname, f.name)) break i;
-        } else @compileError(std.fmt.comptimePrint("invalid tag .{s}\n", .{tagname}));
-
-        return .{ .tag = tagval, .payload = @unionInit(Payload, tagname, payload_value) };
+    comptime {
+        std.debug.assert(@sizeOf(ReadErr) == 40);
     }
-    pub const Payload = extern union {
-        NotFound: void,
-        Interrupted: void,
-        InvalidFilename: void,
-        PermissionDenied: void,
-        TooManySymlinks: void, //aka FilesystemLoop
-        TooManyHardlinks: void,
-        TimedOut: void,
-        StaleNetworkFileHandle: void,
-        OutOfMemory: void,
-        Unsupported: void,
-        Unrecognized: extern struct {
-            code: i32,
-            message: RocStr,
-        },
+
+    pub fn init(comptime tag: Tag, mpayload: ?Payload) ReadErr {
+        const payload = mpayload orelse Payload{ .code = -1, .message = RocStr.empty() };
+        return .{ .tag = @enumToInt(tag), .code = payload.code, .message = payload.message };
+    }
+    pub const Payload = extern struct {
+        code: i32,
+        message: RocStr,
+    };
+    pub const Tag = enum(u8) {
+        Interrupted,
+        InvalidFilename,
+        NotFound,
+        OutOfMemory,
+        PermissionDenied,
+        StaleNetworkFileHandle,
+        TimedOut,
+        TooManyHardlinks,
+        TooManySymlinks,
+        Unsupported,
+        Unrecognized,
     };
 };
 
@@ -288,17 +293,17 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResul
         // std.debug.print("path '{s}' realpath {s}\n", .{ path_slice, realpath });
         // TODO better error handling. this doesn't check the error, assuming FileNotFound
         const file = std.fs.cwd().openFile(path_slice, .{}) catch return .{
-            .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+            .payload = .{ .err = ReadErr.init(.NotFound, null) },
             .tag = 0,
         };
         if (file.handle == -1) return .{
-            .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+            .payload = .{ .err = ReadErr.init(.NotFound, null) },
             .tag = 0,
         };
         // NOTE this defer must come after early return if fd == -1. otherwise boom
         defer file.close();
         const stat = file.stat() catch return .{
-            .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+            .payload = .{ .err = ReadErr.init(.NotFound, null) },
             .tag = 0,
         };
         // std.debug.print("stat.size {}\n", .{stat.size});
@@ -306,7 +311,7 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResul
         if (roclist.bytes) |bytes| {
             const slice = bytes[0..stat.size];
             const amt = file.readAll(slice) catch return .{
-                .payload = .{ .err = ReadErr.init(.NotFound, {}) },
+                .payload = .{ .err = ReadErr.init(.NotFound, null) },
                 .tag = 0,
             };
             // TODO: handle error here
@@ -319,7 +324,7 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResul
         }
     }
     return .{
-        .payload = .{ .err = ReadErr.init(.InvalidFilename, {}) },
+        .payload = .{ .err = ReadErr.init(.InvalidFilename, null) },
         .tag = 0,
     };
 }
