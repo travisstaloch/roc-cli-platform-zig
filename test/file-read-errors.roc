@@ -1,4 +1,4 @@
-app "main"
+app "file-read-errors"
     packages { pf: "../platform/main.roc" }
     imports [
         pf.Stdout,
@@ -14,6 +14,9 @@ main : Program
 main = Program.withArgs \_ ->
     task =
         # nonpath = "not-a-file"
+        # arg1 = List.get args 1 |> Result.onFail "empty"
+        # when arg1 is 
+
         nonpath = "foo" # FIXME foo returns an Unrecognized
         bytes <- nonpath
             |> Path.fromStr
