@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
-roc build platform-test/main.roc 
-foo=bar platform-test/platform-main arg1 arg2
+roc build test/main.roc 
+foo=bar test/main arg1 arg2

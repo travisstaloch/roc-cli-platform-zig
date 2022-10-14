@@ -6,5 +6,5 @@
 *metadata
 *preprocessedhost
 platform/cli-platform-rust
-platform-test/platform-main
+test/main
 *.old
