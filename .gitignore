@@ -7,4 +7,6 @@
 *preprocessedhost
 platform/cli-platform-rust
 test/main
+test/file-read-errors
+2021
 *.old

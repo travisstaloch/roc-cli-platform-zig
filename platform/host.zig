@@ -251,11 +251,13 @@ const RocFileReadResult = RocResultUnion(RocList, ReadErr);
 // FIXME: Unrecognized segfaults. maybe layout is wrong?
 // TODO 32bit platform support
 pub const ReadErr = extern struct {
-    code: i32,
     message: RocStr,
+    code: i32,
+    _padding: [7]u8 = undefined,
     tag: u8,
 
     comptime {
+        // @compileLog(@sizeOf(ReadErr));
         std.debug.assert(@sizeOf(ReadErr) == 40);
     }
 
@@ -292,7 +294,7 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResul
         // std.debug.print("path '{s}' realpath {s}\n", .{ path_slice, realpath });
         // TODO better error handling. this doesn't check the error, assuming FileNotFound
         if (std.mem.eql(u8, path_slice, "foo")) return .{
-            .payload = .{ .err = ReadErr.init(.Unrecognized, .{ .code = 0, .message = RocStr.fromSlice("fo ur twenty") }) },
+            .payload = .{ .err = ReadErr.init(.Unrecognized, .{ .code = 69, .message = RocStr.fromSlice("fo ur twenty") }) },
             .tag = 0,
         };
         const file = std.fs.cwd().openFile(path_slice, .{}) catch return .{
