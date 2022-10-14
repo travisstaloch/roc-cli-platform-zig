@@ -1,4 +1,4 @@
-app "platform-main"
+app "main"
     packages { pf: "../platform/main.roc" }
     imports [
         pf.Stdout,
@@ -16,7 +16,7 @@ main = Program.withArgs \args ->
     task = 
         # Stdout/Stderr.line
         # File.readBytes/readUtf8
-        path = "platform-test/main.roc"
+        path = "test/main.roc"
         contents <- path |> Path.fromStr |> File.readUtf8 |> Task.await
         raw = Str.toUtf8 contents
         head = List.takeFirst raw 35 |> Str.fromUtf8 |> Result.withDefault ""

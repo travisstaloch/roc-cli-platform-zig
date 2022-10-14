@@ -8,11 +8,11 @@ An experimental [roc lang](https://github.com/roc-lang) cli platform in [zig](ht
 # usage
 1. clone this repo
 2. reference [platform/main.roc](platform/main.roc) in your roc app like this:
-   `packages { pf: "path/to/platform/main.roc" }` (see [platform-test/main.roc](platform-test/main.roc) for an example)
+   `packages { pf: "path/to/platform/main.roc" }` (see [test/main.roc](test/main.roc) for an example)
 
 # test
 ```console
-./test.sh # builds and runs platform-test/main.roc
+./test.sh # builds and runs test/main.roc
 ```
 # status
   - [x] Stdout.line, Stderr.line
@@ -20,7 +20,7 @@ An experimental [roc lang](https://github.com/roc-lang) cli platform in [zig](ht
   - [x] Process.withArgs
   - [x] Env.{var,cwd,setCwd,exePath}
 
-see [platform-test/main.roc](platform-test/main.roc) to see what works.  
+see [test/main.roc](test/main.roc) to see what works.  
 
 # notes
 - copied to platform/ from roc repo
