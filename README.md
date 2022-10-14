@@ -12,7 +12,7 @@ An experimental [roc lang](https://github.com/roc-lang) cli platform in [zig](ht
 
 # test
 ```console
-./test.sh # builds and runs test/main.roc
+./test/run.sh # builds and runs test/main.roc and other testing scripts
 ```
 # status
   - [x] Stdout.line, Stderr.line
