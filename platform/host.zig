@@ -248,9 +248,8 @@ const ResultVoid = extern struct {
 // produced by roc like InternalFile.ReadError
 const RocFileReadResult = RocResultUnion(RocList, ReadErr);
 
-// FIXME: file-read-errors.roc always prints 'other unhandled error' for all errors
-// not sure what is causing this. perhaps the ReadErr layout still isn't
-// correct?
+// FIXME: Unrecognized segfaults. maybe layout is wrong?
+// TODO 32bit platform support
 pub const ReadErr = extern struct {
     code: i32,
     message: RocStr,
@@ -278,8 +277,8 @@ pub const ReadErr = extern struct {
         TimedOut,
         TooManyHardlinks,
         TooManySymlinks,
-        Unsupported,
         Unrecognized,
+        Unsupported,
     };
 };
 
@@ -292,6 +291,10 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResul
         // const realpath = std.fs.cwd().realpath(".", &realpathbuf);
         // std.debug.print("path '{s}' realpath {s}\n", .{ path_slice, realpath });
         // TODO better error handling. this doesn't check the error, assuming FileNotFound
+        if (std.mem.eql(u8, path_slice, "foo")) return .{
+            .payload = .{ .err = ReadErr.init(.Unrecognized, .{ .code = 0, .message = RocStr.fromSlice("fo ur twenty") }) },
+            .tag = 0,
+        };
         const file = std.fs.cwd().openFile(path_slice, .{}) catch return .{
             .payload = .{ .err = ReadErr.init(.NotFound, null) },
             .tag = 0,
