@@ -18,7 +18,7 @@ hosted Effect
         stdinLine,
         # sendRequest,
         fileReadBytes,
-        fileReadBytes2,
+        fileDebugReadErr,
         fileDelete,
         fileWriteUtf8,
         fileWriteBytes,
@@ -37,7 +37,6 @@ fileWriteBytes : List U8, List U8 -> Effect (Result {} InternalFile.WriteErr)
 fileWriteUtf8 : List U8, Str -> Effect (Result {} InternalFile.WriteErr)
 fileDelete : List U8 -> Effect (Result {} InternalFile.WriteErr)
 fileReadBytes : List U8 -> Effect (Result (List U8) InternalFile.ReadErr)
-fileReadBytes2 : List U8 -> Effect (List U8)
 dirList : List U8 -> Effect (Result (List (List U8)) InternalDir.ReadErr)
 envDict : Effect (Dict Str Str)
 envVar : Str -> Effect (Result Str {})
@@ -51,3 +50,8 @@ args : Effect (List Str)
 cwd : Effect (List U8)
 
 # sendRequest : Box Request -> Effect Response
+
+# TODO remove this or move somewhere non-visible
+# for testing only : always returns ReadErr corresponding to input Str
+#  ie : given "NotFound" returns ReadErr NotFound
+fileDebugReadErr : List U8 -> Effect (Result (List U8) InternalFile.ReadErr)

@@ -5,41 +5,38 @@ app "file-read-errors"
         pf.Stderr,
         pf.Program.{ Program },
         pf.Task,
-        pf.Path,
         pf.File,
+        pf.Path,
     ]
     provides [main] to pf
 
 main : Program
-main = Program.withArgs \_ ->
+main = Program.withArgs \args ->
     task =
-        # nonpath = "not-a-file"
-        # arg1 = List.get args 1 |> Result.onFail "empty"
-        # when arg1 is 
-
-        nonpath = "foo" # FIXME foo returns an Unrecognized
-        bytes <- nonpath
+        arg1 = List.get args 1 |> Result.withDefault "empty"
+        _ <- arg1
             |> Path.fromStr
-            |> File.readBytes
+            |> File.debugReadErr
             |> Task.onFail (\e ->
                 _ <- (when e is
-                    FileReadErr _ NotFound ->  Stderr.line "not found"
-                    FileReadErr _ Interrupted ->  Stderr.line "Interrupted"
-                    FileReadErr _ InvalidFilename ->  Stderr.line "InvalidFilename"
-                    FileReadErr _ PermissionDenied ->  Stderr.line "PermissionDenied"
-                    FileReadErr _ TooManySymlinks ->  Stderr.line "TooManySymlinks"
-                    FileReadErr _ TooManyHardlinks ->  Stderr.line "TooManyHardlinks"
-                    FileReadErr _ TimedOut ->  Stderr.line "TimedOut"
-                    FileReadErr _ StaleNetworkFileHandle ->  Stderr.line "StaleNetworkFileHandle"
-                    FileReadErr _ OutOfMemory ->  Stderr.line "OutOfMemory"
-                    FileReadErr _ Unsupported ->  Stderr.line "Unsupported"
+                    FileReadErr _ NotFound ->  Stdout.line "NotFound"
+                    FileReadErr _ Interrupted ->  Stdout.line "Interrupted"
+                    FileReadErr _ InvalidFilename ->  Stdout.line "InvalidFilename"
+                    FileReadErr _ PermissionDenied ->  Stdout.line "PermissionDenied"
+                    FileReadErr _ TooManySymlinks ->  Stdout.line "TooManySymlinks"
+                    FileReadErr _ TooManyHardlinks ->  Stdout.line "TooManyHardlinks"
+                    FileReadErr _ TimedOut ->  Stdout.line "TimedOut"
+                    FileReadErr _ StaleNetworkFileHandle ->  Stdout.line "StaleNetworkFileHandle"
+                    FileReadErr _ OutOfMemory ->  Stdout.line "OutOfMemory"
+                    FileReadErr _ Unsupported ->  Stdout.line "Unsupported"
                     FileReadErr _ (Unrecognized code message) ->
                         codestr = Num.toStr code
-                        Stderr.line "Unrecognized code \(codestr) message \(message)"
+                        Stdout.line "Unrecognized code \(codestr) message \(message)"
                     ) |> Task.await
                 Task.fail e) |> Task.await
-        str = Str.fromUtf8 bytes |> Result.withDefault ""
-        Stdout.line "\(str)"
+        # TODO remove this - will never be reached. not sure how to
+        # str = Str.fromUtf8 x |> Result.withDefault ""
+        Stdout.line ""
 
     Task.attempt task \result ->
         when result is

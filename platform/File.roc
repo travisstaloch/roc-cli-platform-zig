@@ -4,7 +4,8 @@ interface File
         # WriteErr, write, writeUtf8, writeBytes, 
         readUtf8, 
         readBytes, 
-        # delete
+        # delete,
+        debugReadErr,
     ]
     imports [Task.{ Task }, InternalTask, InternalFile, Path.{ Path }, InternalPath, Effect.{ Effect }]
 
@@ -152,14 +153,6 @@ toReadTask = \path, toEffect ->
     |> InternalTask.fromEffect
     |> Task.mapFail \err -> FileReadErr path err
 
-# toReadTask2 : Path, (List U8 -> Effect (List U8)) -> Task ok [FileReadErr Path err]* [Read [File]*]*
-# toReadTask2 = \path, list ->
-#     InternalPath.toBytes path
-#     # |> Ok list
-#     # |> Effect 
-#     |> list
-#     |> Effect.map (\x -> Ok x)
-#     # |> Effect.toEffect
-#     # |> \x -> Effect (Ok x)
-#     |> InternalTask.fromEffect 
-#     |> Task.mapFail \err -> FileReadErr path err
+debugReadErr : Path -> Task (List U8) [FileReadErr Path ReadErr]* [Read [File]*]*
+debugReadErr = \name ->
+    toReadTask name \bytes -> Effect.fileDebugReadErr bytes

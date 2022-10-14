@@ -249,15 +249,15 @@ const ResultVoid = extern struct {
 const RocFileReadResult = RocResultUnion(RocList, ReadErr);
 
 // FIXME: Unrecognized segfaults. maybe layout is wrong?
-// TODO 32bit platform support
+// TODO 32bit platform support. NOTE - message/code will be in reverse order
+//   for 32 bit arches because fields are sorted first by alignment and then by
+//   field name
 pub const ReadErr = extern struct {
     message: RocStr,
     code: i32,
-    _padding: [7]u8 = undefined,
-    tag: u8,
+    tag: usize,
 
     comptime {
-        // @compileLog(@sizeOf(ReadErr));
         std.debug.assert(@sizeOf(ReadErr) == 40);
     }
 
@@ -269,6 +269,7 @@ pub const ReadErr = extern struct {
         code: i32,
         message: RocStr,
     };
+
     pub const Tag = enum(u8) {
         Interrupted,
         InvalidFilename,
@@ -293,10 +294,6 @@ pub export fn roc_fx_fileReadBytes(path: *RocList) callconv(.C) RocFileReadResul
         // const realpath = std.fs.cwd().realpath(".", &realpathbuf);
         // std.debug.print("path '{s}' realpath {s}\n", .{ path_slice, realpath });
         // TODO better error handling. this doesn't check the error, assuming FileNotFound
-        if (std.mem.eql(u8, path_slice, "foo")) return .{
-            .payload = .{ .err = ReadErr.init(.Unrecognized, .{ .code = 69, .message = RocStr.fromSlice("fo ur twenty") }) },
-            .tag = 0,
-        };
         const file = std.fs.cwd().openFile(path_slice, .{}) catch return .{
             .payload = .{ .err = ReadErr.init(.NotFound, null) },
             .tag = 0,
@@ -406,5 +403,33 @@ export fn roc_fx_exePath() callconv(.C) ResultRocList {
     return .{
         .payload = .{ .ok = RocList.fromSlice(u8, arg0) },
         .tag = 1,
+    };
+}
+
+// for testing only : always returns ReadErr corresponding to input Str
+//  ie : given "NotFound" returns ReadErr NotFound
+pub export fn roc_fx_fileDebugReadErr(err_name: *RocStr) callconv(.C) RocFileReadResult {
+    const slice = err_name.asSlice();
+    const tag = std.meta.stringToEnum(ReadErr.Tag, slice) orelse
+        return .{ .tag = 0, .payload = .{ .err = ReadErr.init(.Unsupported, .{
+        .code = -2,
+        .message = RocStr.fromSlice("unmatched ReadErr.Tag name"),
+    }) } };
+
+    return switch (tag) {
+        .Interrupted => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.Interrupted, null) } },
+        .InvalidFilename => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.InvalidFilename, null) } },
+        .NotFound => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.NotFound, null) } },
+        .OutOfMemory => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.OutOfMemory, null) } },
+        .PermissionDenied => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.PermissionDenied, null) } },
+        .StaleNetworkFileHandle => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.StaleNetworkFileHandle, null) } },
+        .TimedOut => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.TimedOut, null) } },
+        .TooManyHardlinks => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.TooManyHardlinks, null) } },
+        .TooManySymlinks => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.TooManySymlinks, null) } },
+        .Unsupported => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.Unsupported, null) } },
+        .Unrecognized => .{ .tag = 0, .payload = .{ .err = ReadErr.init(.Unrecognized, .{
+            .code = 69,
+            .message = RocStr.fromSlice("fo ur twenty"),
+        }) } },
     };
 }
