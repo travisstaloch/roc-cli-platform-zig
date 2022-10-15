@@ -16,7 +16,7 @@ An experimental [roc lang](https://github.com/roc-lang) cli platform in [zig](ht
 ```
 # status
   - [x] Stdout.line, Stderr.line
-  - [x] File.readBytes - includes error handling
+  - [x] File.readBytes - includes some error handling
   - [x] Process.withArgs
   - [x] Env.{var,cwd,setCwd,exePath}
 
